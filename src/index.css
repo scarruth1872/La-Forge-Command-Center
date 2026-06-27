@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@theme {
+  --color-enterprise-dark: #050608;
+  --color-enterprise-panel: #0a0c12;
+  --color-enterprise-border: #1e293b;
+  --color-lcars-amber: #f59e0b;
+  --color-lcars-orange: #f97316;
+  --color-lcars-cyan: #60a5fa;
+  --color-lcars-red: #ef4444;
+  --color-lcars-green: #22c55e;
+  --color-lcars-purple: #3b82f6;
+  --color-lcars-blue: #2563eb;
+  
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+@layer base {
+  body {
+    background-color: #050608;
+    color: #cbd5e1;
+    font-family: var(--font-sans);
+  }
+  
+  /* Custom scrollbar styling for technical terminals */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #050608;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3b82f6;
+  }
+}
+
+/* Starfleet scanlines glowing animations */
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.terminal-overlay {
+  position: relative;
+  overflow: hidden;
+}
+
+.terminal-overlay::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 50;
+  background-size: 100% 4px, 6px 100%;
+  pointer-events: none;
+}
+
+.glow-amber {
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.glow-cyan {
+  text-shadow: 0 0 8px rgba(96, 165, 250, 0.5);
+}
+
+.glow-green {
+  text-shadow: 0 0 8px rgba(34, 197, 150, 0.5);
+}
+
+.glow-red {
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+.glow-purple {
+  text-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+}
+
