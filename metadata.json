@@ -1,6 +1,8 @@
 {
   "name": "Starfleet Operations Bridge",
   "description": "An advanced operational metrics dashboard featuring interactive topology, service dependency health matrices, engineering bay diagnostics, and AI-powered self-healing commands.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "microphone"
+  ],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

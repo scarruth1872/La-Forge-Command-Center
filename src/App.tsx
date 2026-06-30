@@ -39,7 +39,9 @@ import {
   RefreshCw, 
   Clock, 
   Heart,
-  FileText
+  FileText,
+  Volume2,
+  VolumeX
 } from "lucide-react";
 
 export default function App() {
@@ -72,6 +74,186 @@ export default function App() {
     "Starfleet Computer online. Welcome back, Commander La Forge. Systems currently operating on optimal auxiliary power grids."
   );
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+
+  // Immersive Voice and Audio Core States
+  const [isVoiceActive, setIsVoiceActive] = useState<boolean>(false);
+  const [speakEnabled, setSpeakEnabled] = useState<boolean>(true);
+  const [voiceStatus, setVoiceStatus] = useState<"IDLE" | "LISTENING_WAKE" | "LISTENING_CMD" | "TALKING" | "UNSUPPORTED">("IDLE");
+  const [voicePitch, setVoicePitch] = useState<number>(1.0); // Smooth classic Star Trek pitch
+  const [voiceRate, setVoiceRate] = useState<number>(0.95);  // Smooth measured cadence
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      const loadVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        setAvailableVoices(voices);
+        
+        // Find a perfect default Star Trek Computer voice (Majel-like)
+        const preferred = voices.find(v => 
+          v.name.includes("Zira") || // Windows classic synthesized female
+          v.name.includes("Samantha") || // Apple smooth Samantha
+          v.name.includes("Google US English") || // Chrome smooth
+          v.name.includes("Hazel") ||
+          (v.lang.startsWith("en-") && v.name.toLowerCase().includes("female")) ||
+          v.lang.startsWith("en-US")
+        );
+        if (preferred) {
+          setSelectedVoiceName(preferred.name);
+        } else if (voices.length > 0) {
+          setSelectedVoiceName(voices[0].name);
+        }
+      };
+
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
+
+  // Web Audio LCARS Sound Synthesizer
+  const playLcarsBeep = (type: "WAKE" | "ACK" | "ERROR" | "CHIRP") => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      
+      if (type === "WAKE") {
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        osc1.connect(gainNode);
+        osc2.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        osc1.frequency.setValueAtTime(520, ctx.currentTime);
+        osc2.frequency.setValueAtTime(660, ctx.currentTime);
+        gainNode.gain.setValueAtTime(0.08, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        
+        osc1.start();
+        osc2.start();
+        osc1.stop(ctx.currentTime + 0.35);
+        osc2.stop(ctx.currentTime + 0.35);
+      } else if (type === "ACK") {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1100, ctx.currentTime + 0.12);
+        gainNode.gain.setValueAtTime(0.06, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        
+        osc.start();
+        osc.stop(ctx.currentTime + 0.15);
+      } else if (type === "ERROR") {
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        osc1.connect(gainNode);
+        osc2.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        osc1.frequency.setValueAtTime(180, ctx.currentTime);
+        osc2.frequency.setValueAtTime(185, ctx.currentTime);
+        gainNode.gain.setValueAtTime(0.12, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+        
+        osc1.start();
+        osc2.start();
+        osc1.stop(ctx.currentTime + 0.45);
+        osc2.stop(ctx.currentTime + 0.45);
+      } else if (type === "CHIRP") {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(600, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.08);
+        gainNode.gain.setValueAtTime(0.05, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+        
+        osc.start();
+        osc.stop(ctx.currentTime + 0.1);
+      }
+    } catch (e) {
+      console.warn("Web Audio API not supported or user gesture needed.", e);
+    }
+  };
+
+  // Text-to-Speech Vocal Response Synthesis
+  const speakResponse = (text: string) => {
+    if (!speakEnabled) return;
+    try {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        
+        // Star Trek computers speak with calm, measured pronunciation
+        const cleanText = text
+          .replace(/\*\*|__|\*|_/g, "")
+          .replace(/\[.*?\]/g, "")
+          .replace(/NOMINAL/g, "nominal")
+          .replace(/OPTIMAL/g, "optimal")
+          .replace(/CRITICAL/g, "critical")
+          .replace(/\bUSS\b/g, "U. S. S.")
+          .replace(/\bEPS\b/g, "E. P. S.")
+          .replace(/\bUTC\b/g, "U. T. C.")
+          .replace(/\bLATENCY\b/g, "latency")
+          .replace(/\bms\b/gi, " milliseconds");
+        
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        const voices = window.speechSynthesis.getVoices();
+        
+        let chosenVoice = voices.find(v => v.name === selectedVoiceName);
+        if (!chosenVoice) {
+          chosenVoice = voices.find(v => 
+            v.name.includes("Zira") || 
+            v.name.includes("Samantha") || 
+            v.name.includes("Google US English") ||
+            (v.lang.startsWith("en-") && v.name.toLowerCase().includes("female"))
+          );
+        }
+        
+        if (chosenVoice) {
+          utterance.voice = chosenVoice;
+        }
+        
+        utterance.pitch = voicePitch;
+        utterance.rate = voiceRate;
+        utterance.volume = 0.95;
+        
+        utterance.onstart = () => {
+          setVoiceStatus("TALKING");
+        };
+        
+        utterance.onend = () => {
+          if (isVoiceActive) {
+            setVoiceStatus("LISTENING_WAKE");
+          } else {
+            setVoiceStatus("IDLE");
+          }
+        };
+
+        utterance.onerror = () => {
+          if (isVoiceActive) {
+            setVoiceStatus("LISTENING_WAKE");
+          } else {
+            setVoiceStatus("IDLE");
+          }
+        };
+
+        window.speechSynthesis.speak(utterance);
+      }
+    } catch (err) {
+      console.error("Speech Synthesis failed:", err);
+    }
+  };
 
   // Time state for Starfleet UTC clock
   const [currentTime, setCurrentTime] = useState<string>("");
@@ -204,21 +386,17 @@ export default function App() {
     addLog(`Initiated manual failover loop on ${subsystemName}. Re-routing 100% of data packet flow to secondary EPS link.`, "INFO");
   };
 
-  // Submit query to server-side Gemini AI interface
-  const handleQuerySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputQuery.trim()) return;
-
-    const userQuery = inputQuery;
-    setInputQuery("");
+  // Reusable query executor for both voice and manual keyboard submissions
+  const processQuery = async (queryText: string) => {
+    if (!queryText.trim()) return;
     setIsThinking(true);
-    addLog(`Command Core: "${userQuery}"`, "INFO");
+    addLog(`Command Core: "${queryText}"`, "INFO");
 
     try {
       const response = await fetch("/api/computer-query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: userQuery })
+        body: JSON.stringify({ query: queryText })
       });
 
       if (!response.ok) {
@@ -228,6 +406,12 @@ export default function App() {
       const data: ComputerResponse = await response.json();
       setAiResponse(data.response);
       setAiAnalysis(data.analysis || null);
+
+      // Play authentic LCARS acknowledgment chirp
+      playLcarsBeep("ACK");
+
+      // Speak back the response
+      speakResponse(data.response);
 
       // Perform real-time action based on AI interpretation
       if (data.action && data.action !== "NONE") {
@@ -252,11 +436,141 @@ export default function App() {
       }
     } catch (err: any) {
       console.error(err);
-      setAiResponse("Main subspace antenna loop reports high interference. Please restate query directive.");
+      const fallbackText = "Main subspace antenna loop reports high interference. Please restate query directive.";
+      setAiResponse(fallbackText);
+      speakResponse(fallbackText);
+      playLcarsBeep("ERROR");
     } finally {
       setIsThinking(false);
     }
   };
+
+  // Submit query to server-side Gemini AI interface
+  const handleQuerySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputQuery.trim()) return;
+    const userQuery = inputQuery;
+    setInputQuery("");
+    await processQuery(userQuery);
+  };
+
+  // Maintain a stable ref of processQuery to execute in SpeechRecognition event listeners safely
+  const processQueryRef = useRef(processQuery);
+  useEffect(() => {
+    processQueryRef.current = processQuery;
+  });
+
+  const recognitionRef = useRef<any>(null);
+
+  // Speech Recognition continuous hook
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      if (isVoiceActive) {
+        setVoiceStatus("UNSUPPORTED");
+        addLog("Speech recognition not natively supported in this browser environment. Using manual simulation triggers.", "WARNING");
+      }
+      return;
+    }
+
+    if (isVoiceActive) {
+      let rec: any;
+      try {
+        rec = new SpeechRecognition();
+        rec.continuous = true;
+        rec.interimResults = false;
+        rec.lang = "en-US";
+
+        rec.onstart = () => {
+          setVoiceStatus("LISTENING_WAKE");
+          addLog("Microphone array activated. Awaiting vocal wake word 'Computer' or 'La Forge'...", "INFO");
+          playLcarsBeep("CHIRP");
+        };
+
+        rec.onresult = (event: any) => {
+          const lastResultIndex = event.results.length - 1;
+          const transcript = event.results[lastResultIndex][0].transcript.trim();
+          const lower = transcript.toLowerCase();
+          
+          console.log("Speech heard: ", transcript);
+
+          // Check if wake-word is present
+          const hasWake = lower.includes("computer") || lower.includes("la forge") || lower.includes("forge");
+          if (hasWake) {
+            playLcarsBeep("WAKE");
+            // Find what was said after the wake word
+            let command = "";
+            if (lower.includes("computer")) {
+              command = transcript.substring(lower.indexOf("computer") + 8).trim();
+            } else if (lower.includes("la forge")) {
+              command = transcript.substring(lower.indexOf("la forge") + 8).trim();
+            } else if (lower.includes("forge")) {
+              command = transcript.substring(lower.indexOf("forge") + 5).trim();
+            }
+
+            if (command.length > 2) {
+              setVoiceStatus("LISTENING_CMD");
+              addLog(`Vocal wake-word and directive recognized: "${command}"`, "INFO");
+              processQueryRef.current(command);
+            } else {
+              setVoiceStatus("LISTENING_CMD");
+              const greetings = "Computer online. State directive, Commander.";
+              setAiResponse(greetings);
+              speakResponse(greetings);
+              addLog("Voice Interface: Wake word detected. Ready for your directive.", "INFO");
+            }
+          } else {
+            // Conversational mode: if already waiting for command, treat entire phrase as a query
+            if (voiceStatus === "LISTENING_CMD") {
+              addLog(`Vocal command received: "${transcript}"`, "INFO");
+              processQueryRef.current(transcript);
+            }
+          }
+        };
+
+        rec.onerror = (event: any) => {
+          console.warn("Speech recognition error:", event.error);
+          if (event.error === "not-allowed") {
+            addLog("Microphone sensor link rejected. Verify browser frame permissions are allowed.", "CRITICAL");
+            setIsVoiceActive(false);
+          }
+        };
+
+        rec.onend = () => {
+          // Restart recognition if voice interface is still toggled active
+          if (isVoiceActive) {
+            try {
+              rec.start();
+            } catch (e) {
+              // already running
+            }
+          }
+        };
+
+        recognitionRef.current = rec;
+        rec.start();
+      } catch (err) {
+        console.error("Failed to start SpeechRecognition:", err);
+      }
+    } else {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
+        recognitionRef.current = null;
+      }
+      setVoiceStatus("IDLE");
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
+        recognitionRef.current = null;
+      }
+    };
+  }, [isVoiceActive, voiceStatus]);
 
   // Fast pre-packaged command macros for users
   const handlePresetCommand = (commandText: string) => {
@@ -333,20 +647,41 @@ export default function App() {
         </div>
       </header>
 
-      {/* TACTICAL COMPUTER PROMPT BAR (Gemini Interface) */}
+      {/* TACTICAL COMPUTER PROMPT BAR (Gemini Interface & Voice Core) */}
       <section className="bg-enterprise-panel border border-enterprise-border rounded-lg p-4 mb-4 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-24 h-1 bg-lcars-cyan rounded-br" />
         
-        <div className="flex items-center gap-2 mb-3 border-b border-enterprise-border/50 pb-2">
-          <Terminal className="w-4 h-4 text-lcars-cyan" />
-          <h2 className="text-xs font-mono font-bold text-lcars-cyan uppercase tracking-wider glow-cyan">
-            STARFLEET INTEL-LINK / LA FORGE VOICE COUPLING
-          </h2>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3 border-b border-enterprise-border/50 pb-2">
+          <div className="flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-lcars-cyan animate-pulse" />
+            <h2 className="text-xs font-mono font-bold text-lcars-cyan uppercase tracking-wider glow-cyan">
+              STARFLEET COMPUTER VOICE LINK // LA FORGE BRIDGE CORRELATION
+            </h2>
+          </div>
+          <div className="flex items-center gap-2 text-[9px] font-mono text-slate-500 uppercase">
+            <span>Voice Status:</span>
+            <span className={`px-2 py-0.5 rounded font-bold border ${
+              voiceStatus === "LISTENING_WAKE" 
+                ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30 animate-pulse" 
+                : voiceStatus === "LISTENING_CMD"
+                  ? "bg-green-500/10 text-green-400 border-green-500/30 animate-pulse"
+                  : voiceStatus === "TALKING"
+                    ? "bg-purple-500/10 text-purple-400 border-purple-500/30 animate-pulse"
+                    : "bg-slate-900 text-slate-400 border-slate-800"
+            }`}>
+              {voiceStatus === "LISTENING_WAKE" && "Monitoring Wake Word"}
+              {voiceStatus === "LISTENING_CMD" && "Awaiting Directive"}
+              {voiceStatus === "TALKING" && "Vocalizing Response"}
+              {voiceStatus === "IDLE" && "Sensors Standby"}
+              {voiceStatus === "UNSUPPORTED" && "Manual Override Active"}
+            </span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-center">
-          {/* Conversational Screen Output */}
-          <div className="lg:col-span-3 bg-[#030407] rounded-lg border border-enterprise-border/50 p-3 h-24 flex flex-col justify-between overflow-y-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-stretch">
+          
+          {/* Conversational Screen Output & Dynamic Waveform */}
+          <div className="lg:col-span-2 bg-[#030407] rounded-lg border border-enterprise-border/50 p-3 min-h-24 flex flex-col justify-between">
             <div className="font-mono text-xs leading-relaxed text-slate-300">
               <span className="text-lcars-cyan font-bold block mb-1 uppercase text-[10px]">COMPUTER CORE:</span>
               {isThinking ? (
@@ -355,61 +690,246 @@ export default function App() {
                 <p className="glow-cyan">{aiResponse}</p>
               )}
             </div>
-            {aiAnalysis && (
-              <div className="mt-2 text-[9px] font-mono text-lcars-orange border-t border-enterprise-border/40 pt-1 flex justify-between">
-                <span>PREDICTIVE ANOMALY VECTOR:</span>
-                <span>{aiAnalysis}</span>
+            
+            <div className="mt-3 flex items-center justify-between border-t border-enterprise-border/30 pt-2">
+              {/* Responsive SVG Waveform */}
+              <div className="flex items-center gap-1.5 h-6">
+                <span className="text-[9px] text-slate-500 uppercase font-bold tracking-tight">Audio Line:</span>
+                <div className="flex items-center gap-0.5 h-full">
+                  {[...Array(16)].map((_, i) => {
+                    let heightClass = "h-1";
+                    let animClass = "";
+                    if (voiceStatus === "TALKING") {
+                      animClass = "animate-bounce";
+                      const heights = ["h-2", "h-4", "h-3", "h-5", "h-2", "h-4", "h-3", "h-5", "h-2", "h-4", "h-3", "h-5", "h-2", "h-4", "h-3", "h-2"];
+                      heightClass = heights[i % heights.length];
+                    } else if (voiceStatus === "LISTENING_CMD") {
+                      animClass = "animate-pulse";
+                      const heights = ["h-2", "h-3", "h-2", "h-3", "h-2", "h-3", "h-2", "h-3", "h-2", "h-3", "h-2", "h-3", "h-2", "h-3", "h-2", "h-2"];
+                      heightClass = heights[i % heights.length];
+                    } else if (voiceStatus === "LISTENING_WAKE") {
+                      const heights = ["h-1.5", "h-2", "h-1.5", "h-2", "h-1.5", "h-2", "h-1.5", "h-2", "h-1.5", "h-2", "h-1.5", "h-2", "h-1.5", "h-2", "h-1.5", "h-1.5"];
+                      heightClass = heights[i % heights.length];
+                    }
+                    return (
+                      <div 
+                        key={i} 
+                        className={`w-1 rounded-full bg-lcars-cyan transition-all duration-300 ${animClass} ${heightClass}`}
+                        style={{ 
+                          animationDelay: `${i * 0.05}s`,
+                          opacity: voiceStatus === "TALKING" ? 1 : voiceStatus === "LISTENING_CMD" ? 0.8 : voiceStatus === "LISTENING_WAKE" ? 0.4 : 0.15
+                        }}
+                      />
+                    );
+                  })}
+                </div>
               </div>
-            )}
+
+              {aiAnalysis && (
+                <span className="text-[9px] font-mono text-lcars-orange uppercase">
+                  Anomaly Vector: {aiAnalysis}
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Form Prompter input */}
-          <div className="flex flex-col gap-2">
-            <form onSubmit={handleQuerySubmit} className="flex gap-1">
-              <div className="flex-1 bg-slate-950 border border-enterprise-border/80 rounded flex items-center px-2">
-                <input
-                  type="text"
-                  value={inputQuery}
-                  onChange={(e) => setInputQuery(e.target.value)}
-                  placeholder="Ask computer (e.g. Isolate Node Bravo-7)..."
-                  className="flex-1 bg-transparent border-none outline-none text-xs font-mono text-slate-100 placeholder-slate-600 py-1.5"
-                />
-                <button 
-                  type="button" 
-                  onClick={() => handlePresetCommand("Computer, status report.")}
-                  title="Voice command macro"
+          {/* Vocal Sensor Controls & Hardware Setup */}
+          <div className="bg-[#0a0c12] rounded-lg border border-enterprise-border/50 p-3 flex flex-col justify-between">
+            <div>
+              <span className="text-slate-500 uppercase text-[9px] font-bold block mb-2 tracking-wider">Aural Control Deck</span>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                
+                {/* Micro Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsVoiceActive(!isVoiceActive);
+                    playLcarsBeep("CHIRP");
+                  }}
+                  className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded text-[10px] uppercase font-mono border transition-all ${
+                    isVoiceActive 
+                      ? "bg-cyan-500/10 text-cyan-400 border-cyan-400 font-bold shadow-[0_0_8px_rgba(34,197,94,0.15)] animate-pulse" 
+                      : "bg-slate-950 text-slate-400 border-enterprise-border hover:border-slate-500"
+                  }`}
                 >
-                  <Mic className="w-3.5 h-3.5 text-slate-500 hover:text-lcars-cyan transition-colors" />
+                  <Mic className={`w-3.5 h-3.5 ${isVoiceActive ? "animate-bounce" : ""}`} />
+                  {isVoiceActive ? "Mic Live" : "Mic Muted"}
+                </button>
+
+                {/* Speaker Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSpeakEnabled(!speakEnabled);
+                    playLcarsBeep("CHIRP");
+                  }}
+                  className={`flex items-center justify-center gap-1.5 px-2 py-2 rounded text-[10px] uppercase font-mono border transition-all ${
+                    speakEnabled 
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-400 font-bold" 
+                      : "bg-slate-950 text-slate-500 border-enterprise-border"
+                  }`}
+                >
+                  {speakEnabled ? (
+                    <>
+                      <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Speech On</span>
+                    </>
+                  ) : (
+                    <>
+                      <VolumeX className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Speech Off</span>
+                    </>
+                  )}
                 </button>
               </div>
-              <button
-                type="submit"
-                className="bg-lcars-cyan hover:bg-cyan-600 text-slate-950 px-3 rounded font-bold font-mono text-xs uppercase flex items-center justify-center"
-              >
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </form>
 
-            {/* Quick Command presets */}
-            <div className="flex flex-wrap gap-1 text-[8.5px] font-mono uppercase">
-              <button 
-                onClick={() => handlePresetCommand("Computer, display current latency for subsystem Delta-Rho.")}
-                className="px-1.5 py-0.5 rounded bg-slate-900 border border-enterprise-border text-slate-400 hover:text-slate-200"
-              >
-                Scan Delta-Rho
-              </button>
-              <button 
-                onClick={() => handlePresetCommand("Computer, predict saturation for storage array Gamma-7.")}
-                className="px-1.5 py-0.5 rounded bg-slate-900 border border-enterprise-border text-slate-400 hover:text-slate-200"
-              >
-                Forecast Saturation
-              </button>
-              <button 
-                onClick={() => handlePresetCommand("Computer, isolate Node Bravo-7.")}
-                className="px-1.5 py-0.5 rounded bg-slate-900 border border-enterprise-border text-slate-400 hover:text-slate-200"
-              >
-                Isolate Bravo-7
-              </button>
+              {/* Speech Synthesis voice selector and modulation sliders */}
+              <div className="bg-slate-950/80 rounded border border-enterprise-border/30 p-2 mb-2">
+                <div className="flex flex-col gap-1 text-[8px] font-mono">
+                  <span className="text-slate-500 font-bold uppercase tracking-wider block mb-0.5">VOICE SYNTH SELECTION:</span>
+                  <select
+                    value={selectedVoiceName}
+                    onChange={(e) => {
+                      setSelectedVoiceName(e.target.value);
+                      playLcarsBeep("CHIRP");
+                    }}
+                    className="w-full bg-[#030407] border border-enterprise-border/60 text-slate-300 text-[9px] font-mono px-1 py-0.5 rounded focus:border-lcars-cyan outline-none"
+                  >
+                    {availableVoices.filter(v => v.lang.startsWith("en")).map((v) => (
+                      <option key={v.name} value={v.name} className="bg-slate-950 text-slate-300">
+                        {v.name.replace("Microsoft", "MS").replace("Google", "G").substring(0, 24)}
+                      </option>
+                    ))}
+                    {availableVoices.length === 0 && (
+                      <option className="text-slate-500">System Default Voice</option>
+                    )}
+                  </select>
+
+                  <div className="grid grid-cols-2 gap-2 mt-1.5">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex justify-between text-[7px] text-slate-500 uppercase">
+                        <span>PITCH:</span>
+                        <span className="text-lcars-cyan font-bold">{voicePitch.toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.7"
+                        max="1.3"
+                        step="0.05"
+                        value={voicePitch}
+                        onChange={(e) => setVoicePitch(parseFloat(e.target.value))}
+                        className="w-full h-1 bg-[#050608] rounded-lg appearance-none cursor-pointer accent-lcars-cyan"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex justify-between text-[7px] text-slate-500 uppercase">
+                        <span>SPEED:</span>
+                        <span className="text-lcars-cyan font-bold">{voiceRate.toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.7"
+                        max="1.3"
+                        step="0.05"
+                        value={voiceRate}
+                        onChange={(e) => setVoiceRate(parseFloat(e.target.value))}
+                        className="w-full h-1 bg-[#050608] rounded-lg appearance-none cursor-pointer accent-lcars-cyan"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Real-time speech instructions and test cues */}
+              <div className="text-[8.5px] leading-tight text-slate-400 uppercase font-mono">
+                <p className="text-slate-500 font-bold mb-1">VOICE DIRECTIVES:</p>
+                <p className="mb-1">Say <span className="text-lcars-cyan font-bold">"Computer"</span> followed immediately by your command.</p>
+                <p>Example: <span className="italic text-slate-300">"Computer, status report."</span></p>
+              </div>
+            </div>
+
+            {/* Simulated LCARS audio trigger keys */}
+            <div className="border-t border-enterprise-border/30 pt-2 flex items-center justify-between text-[8px] font-mono text-slate-500">
+              <span className="font-bold">LCARS BEEPS:</span>
+              <div className="flex gap-1.5">
+                <button onClick={() => playLcarsBeep("WAKE")} className="px-1.5 py-0.5 rounded bg-slate-950 border border-enterprise-border/50 text-slate-400 hover:text-slate-200 uppercase">Chime</button>
+                <button onClick={() => playLcarsBeep("ACK")} className="px-1.5 py-0.5 rounded bg-slate-950 border border-enterprise-border/50 text-slate-400 hover:text-slate-200 uppercase">Chirp</button>
+                <button onClick={() => playLcarsBeep("ERROR")} className="px-1.5 py-0.5 rounded bg-slate-950 border border-enterprise-border/50 text-slate-400 hover:text-slate-200 uppercase">Error</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Form Prompter Input & Simulation Suite */}
+          <div className="flex flex-col justify-between p-1">
+            <div>
+              <span className="text-slate-500 uppercase text-[9px] font-bold block mb-1.5 tracking-wider">Tactical Prompt Box</span>
+              <form onSubmit={handleQuerySubmit} className="flex gap-1 mb-2">
+                <div className="flex-1 bg-slate-950 border border-enterprise-border/80 rounded flex items-center px-2">
+                  <input
+                    type="text"
+                    value={inputQuery}
+                    onChange={(e) => setInputQuery(e.target.value)}
+                    placeholder="Ask computer (e.g. Isolate Node Bravo-7)..."
+                    className="flex-1 bg-transparent border-none outline-none text-xs font-mono text-slate-100 placeholder-slate-600 py-1.5"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isThinking}
+                  className="bg-lcars-cyan hover:bg-cyan-600 disabled:opacity-50 text-slate-950 px-3 rounded font-bold font-mono text-xs uppercase flex items-center justify-center transition-all shadow"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </form>
+            </div>
+
+            {/* Quick Simulation Macros Board */}
+            <div>
+              <div className="flex items-center justify-between text-[8px] font-bold text-slate-500 uppercase mb-1">
+                <span>Vocal Simulator Presets</span>
+                <span className="text-[7.5px] px-1 bg-lcars-orange/10 border border-lcars-orange/20 text-lcars-orange rounded font-normal">SIM CUES</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1 text-[8.5px] font-mono uppercase">
+                <button 
+                  onClick={() => {
+                    playLcarsBeep("WAKE");
+                    addLog("Simulated vocal trigger: 'Computer...'", "INFO");
+                    setVoiceStatus("LISTENING_CMD");
+                    const responsePrompt = "Computer online. State directive, Commander.";
+                    setAiResponse(responsePrompt);
+                    speakResponse(responsePrompt);
+                  }}
+                  className="px-1 py-1 text-center rounded bg-[#10141d] border border-enterprise-border hover:border-lcars-cyan text-slate-300 transition-all text-[8px]"
+                  title="Simulate Wake Word trigger"
+                >
+                  <span className="block text-lcars-cyan font-bold mb-0.5">1. Wake</span>
+                  <span>"Computer..."</span>
+                </button>
+                <button 
+                  onClick={() => {
+                    playLcarsBeep("WAKE");
+                    addLog("Simulated voice: 'Computer, isolate Node Bravo-7'", "INFO");
+                    processQuery("Computer, isolate Node Bravo-7");
+                  }}
+                  className="px-1 py-1 text-center rounded bg-[#10141d] border border-enterprise-border hover:border-lcars-cyan text-slate-300 transition-all text-[8px]"
+                  title="Simulate command: Isolate Bravo-7"
+                >
+                  <span className="block text-lcars-green font-bold mb-0.5">2. Isolate</span>
+                  <span>"Bravo-7"</span>
+                </button>
+                <button 
+                  onClick={() => {
+                    playLcarsBeep("WAKE");
+                    addLog("Simulated voice: 'Computer, predict saturation for storage array Gamma-7'", "INFO");
+                    processQuery("Computer, predict saturation for storage array Gamma-7");
+                  }}
+                  className="px-1 py-1 text-center rounded bg-[#10141d] border border-enterprise-border hover:border-lcars-cyan text-slate-300 transition-all text-[8px]"
+                  title="Simulate forecast command"
+                >
+                  <span className="block text-lcars-orange font-bold mb-0.5">3. Predict</span>
+                  <span>"Forecast Array"</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
