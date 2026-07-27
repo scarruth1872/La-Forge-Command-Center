@@ -84,6 +84,12 @@ export default function App() {
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceName, setSelectedVoiceName] = useState<string>("");
 
+  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const voiceStatusRef = useRef(voiceStatus);
+  useEffect(() => {
+    voiceStatusRef.current = voiceStatus;
+  }, [voiceStatus]);
+
   useEffect(() => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       const loadVoices = () => {
@@ -191,8 +197,11 @@ export default function App() {
   const speakResponse = (text: string) => {
     if (!speakEnabled) return;
     try {
-      if (window.speechSynthesis) {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
         window.speechSynthesis.cancel();
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
         
         // Star Trek computers speak with calm, measured pronunciation
         const cleanText = text
@@ -208,6 +217,8 @@ export default function App() {
           .replace(/\bms\b/gi, " milliseconds");
         
         const utterance = new SpeechSynthesisUtterance(cleanText);
+        currentUtteranceRef.current = utterance;
+
         const voices = window.speechSynthesis.getVoices();
         
         let chosenVoice = voices.find(v => v.name === selectedVoiceName);
@@ -233,6 +244,7 @@ export default function App() {
         };
         
         utterance.onend = () => {
+          currentUtteranceRef.current = null;
           if (isVoiceActive) {
             setVoiceStatus("LISTENING_WAKE");
           } else {
@@ -241,6 +253,7 @@ export default function App() {
         };
 
         utterance.onerror = () => {
+          currentUtteranceRef.current = null;
           if (isVoiceActive) {
             setVoiceStatus("LISTENING_WAKE");
           } else {
@@ -253,6 +266,19 @@ export default function App() {
     } catch (err) {
       console.error("Speech Synthesis failed:", err);
     }
+  };
+
+  const handleTestVoice = () => {
+    playLcarsBeep("ACK");
+    if (!speakEnabled) setSpeakEnabled(true);
+    speakResponse("USS Enterprise main computer speech synthesis test nominal.");
+  };
+
+  const handleSimulateVocalDirective = (cmdText: string) => {
+    playLcarsBeep("WAKE");
+    setVoiceStatus("LISTENING_CMD");
+    addLog(`Simulated Vocal Directive: "${cmdText}"`, "INFO");
+    processQuery(cmdText);
   };
 
   // Time state for Starfleet UTC clock
@@ -488,6 +514,11 @@ export default function App() {
         };
 
         rec.onresult = (event: any) => {
+          // Ignore microphone input while system is talking back to user
+          if (voiceStatusRef.current === "TALKING") {
+            return;
+          }
+
           const lastResultIndex = event.results.length - 1;
           const transcript = event.results[lastResultIndex][0].transcript.trim();
           const lower = transcript.toLowerCase();
@@ -521,7 +552,7 @@ export default function App() {
             }
           } else {
             // Conversational mode: if already waiting for command, treat entire phrase as a query
-            if (voiceStatus === "LISTENING_CMD") {
+            if (voiceStatusRef.current === "LISTENING_CMD") {
               addLog(`Vocal command received: "${transcript}"`, "INFO");
               processQueryRef.current(transcript);
             }
@@ -530,8 +561,8 @@ export default function App() {
 
         rec.onerror = (event: any) => {
           console.warn("Speech recognition error:", event.error);
-          if (event.error === "not-allowed") {
-            addLog("Microphone sensor link rejected. Verify browser frame permissions are allowed.", "CRITICAL");
+          if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+            addLog("Microphone sensor link rejected or unavailable in this iframe. Try opening app in new tab or use directive presets.", "CRITICAL");
             setIsVoiceActive(false);
           }
         };
@@ -539,11 +570,15 @@ export default function App() {
         rec.onend = () => {
           // Restart recognition if voice interface is still toggled active
           if (isVoiceActive) {
-            try {
-              rec.start();
-            } catch (e) {
-              // already running
-            }
+            setTimeout(() => {
+              try {
+                if (recognitionRef.current) {
+                  recognitionRef.current.start();
+                }
+              } catch (e) {
+                // already running
+              }
+            }, 300);
           }
         };
 
@@ -570,7 +605,7 @@ export default function App() {
         recognitionRef.current = null;
       }
     };
-  }, [isVoiceActive, voiceStatus]);
+  }, [isVoiceActive]);
 
   // Fast pre-packaged command macros for users
   const handlePresetCommand = (commandText: string) => {
@@ -837,14 +872,39 @@ export default function App() {
                       />
                     </div>
                   </div>
+                  <div className="mt-2 pt-1 border-t border-enterprise-border/30 flex justify-between items-center">
+                    <button
+                      type="button"
+                      onClick={handleTestVoice}
+                      className="w-full bg-slate-900 hover:bg-slate-800 text-lcars-cyan border border-lcars-cyan/40 hover:border-lcars-cyan px-2 py-1 rounded text-[8.5px] uppercase font-mono font-bold transition-all flex items-center justify-center gap-1"
+                    >
+                      <Volume2 className="w-3 h-3" />
+                      Test Vocal Synth
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* Real-time speech instructions and test cues */}
               <div className="text-[8.5px] leading-tight text-slate-400 uppercase font-mono">
                 <p className="text-slate-500 font-bold mb-1">VOICE DIRECTIVES:</p>
-                <p className="mb-1">Say <span className="text-lcars-cyan font-bold">"Computer"</span> followed immediately by your command.</p>
-                <p>Example: <span className="italic text-slate-300">"Computer, status report."</span></p>
+                <p className="mb-1">Say <span className="text-lcars-cyan font-bold">"Computer"</span> followed by command.</p>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleSimulateVocalDirective("Computer, status report.")}
+                    className="bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-lcars-cyan/50 text-slate-300 text-[8px] px-1.5 py-0.5 rounded font-mono transition-all"
+                  >
+                    Simulate "Status Report"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSimulateVocalDirective("Computer, isolate Node Bravo-7.")}
+                    className="bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-lcars-cyan/50 text-slate-300 text-[8px] px-1.5 py-0.5 rounded font-mono transition-all"
+                  >
+                    Simulate "Isolate Node"
+                  </button>
+                </div>
               </div>
             </div>
 

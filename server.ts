@@ -40,8 +40,13 @@ app.post("/api/computer-query", async (req, res) => {
   const ai = getGeminiClient();
 
   if (ai) {
-    try {
-      const prompt = `You are the Starfleet Computer Core running on the USS Enterprise main computer banks.
+    const candidateModels = [
+      "gemini-3.6-flash",
+      "gemini-flash-latest",
+      "gemini-3.1-flash-lite"
+    ];
+
+    const prompt = `You are the Starfleet Computer Core running on the USS Enterprise main computer banks.
 Your sub-processors are configured with the professional, engineering-focused, and highly proactive personality of Lieutenant Commander Geordi La Forge.
 Analyze the user's technical query or command. Your objective is to return a conversational, authentic Starfleet diagnostic response and identify if they are trying to perform a system action.
 
@@ -69,31 +74,45 @@ Return a structured JSON object strictly matching this schema:
   "analysis": "High-fidelity diagnostic report or predictive analysis paragraph detailing the warp core efficiency, dilithium alignment, or storage trajectory."
 }`;
 
-      const geminiResponse = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              response: { type: Type.STRING },
-              action: { type: Type.STRING },
-              target: { type: Type.STRING },
-              analysis: { type: Type.STRING },
+    for (const model of candidateModels) {
+      let attempts = 0;
+      const maxAttempts = 2;
+      while (attempts < maxAttempts) {
+        attempts++;
+        try {
+          const geminiResponse = await ai.models.generateContent({
+            model: model,
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  response: { type: Type.STRING },
+                  action: { type: Type.STRING },
+                  target: { type: Type.STRING },
+                  analysis: { type: Type.STRING },
+                },
+                required: ["response", "action", "target", "analysis"],
+              },
             },
-            required: ["response", "action", "target", "analysis"],
-          },
-        },
-      });
+          });
 
-      const responseText = geminiResponse.text;
-      if (responseText) {
-        const parsed = JSON.parse(responseText.trim());
-        return res.json(parsed);
+          const responseText = geminiResponse.text;
+          if (responseText) {
+            const parsed = JSON.parse(responseText.trim());
+            return res.json(parsed);
+          }
+        } catch (e: any) {
+          const isTransient = e.status === 503 || e.status === 429 || (e.message && (e.message.includes("503") || e.message.includes("high demand") || e.message.includes("UNAVAILABLE")));
+          if (isTransient && attempts < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            continue;
+          }
+          // If max attempts reached for this model, break and try next candidate model
+          break;
+        }
       }
-    } catch (e: any) {
-      console.error("Gemini query error, falling back to local engine:", e.message);
     }
   }
 
