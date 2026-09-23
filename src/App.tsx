@@ -356,10 +356,13 @@ export default function App() {
     }
   }, [playbackTime]);
 
+  const logCounterRef = useRef(100);
+
   const addLog = (message: string, severity: "INFO" | "WARNING" | "CRITICAL" | "RESOLVED") => {
     const timestamp = new Date().toTimeString().split(" ")[0];
+    const uniqueId = `log-${Date.now()}-${logCounterRef.current++}-${Math.random().toString(36).substring(2, 6)}`;
     const newLog: ActionLogEntry = {
-      id: `log-${Date.now()}`,
+      id: uniqueId,
       timestamp,
       agent: "La Forge",
       message,
@@ -382,7 +385,7 @@ export default function App() {
     if (!wasFailed) {
       addLog(`Disrupted power conduit feeding the primary ${label} grid. Failover alert triggered!`, "CRITICAL");
       const newAlert: Alert = {
-        id: `alert-${Date.now()}`,
+        id: `alert-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         source: label,
         message: `Subspace connection broken across region coupling! Redundancy routing is active.`,
         severity: "CRITICAL",
@@ -1163,8 +1166,8 @@ export default function App() {
                   ACTIVE SELF-HEALING & AGENT LA FORGE CO-PILOT ACTIONS
                 </span>
                 <div className="space-y-1 bg-[#040509] p-3 rounded border border-enterprise-border/50 max-h-36 overflow-y-auto">
-                  {logs.slice().reverse().map((log, idx) => (
-                    <div key={idx} className="flex justify-between items-start gap-4 py-0.5 border-b border-enterprise-border/20 last:border-0">
+                  {logs.slice().reverse().map((log) => (
+                    <div key={log.id} className="flex justify-between items-start gap-4 py-0.5 border-b border-enterprise-border/20 last:border-0">
                       <div className="flex items-start gap-2">
                         <span className="text-slate-500">[{log.timestamp}]</span>
                         <span className="text-lcars-cyan uppercase font-bold text-[10px]">{log.agent}:</span>
